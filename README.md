@@ -32,6 +32,14 @@ Use phone
 
 ### Messages
 
+JSON Library
+
+```json
+{
+    "mac": "MAC IS HERE",
+    "content": "CONTENT"
+}
+```
 
 ## Extra Credit
 

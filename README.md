@@ -26,6 +26,9 @@ If it is not, then turn off the LED
 - First 6 devices that it discovers over MQTT
 - Each box should include last 2 digits of mac address
 
+### BLE
+
+Use phone
 
 ### Messages
 

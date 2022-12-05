@@ -1,0 +1,3 @@
+## Notes
+
+SSIDs will START with omega (omega-1323) etc...

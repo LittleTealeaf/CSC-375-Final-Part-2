@@ -4,7 +4,7 @@ SSIDs will START with omega (omega-1323) etc...
 
 IP will likely be `192.168.3.1:1883`
 
-Can install mosquitto and run it
+Can install mosquito and run it
 
 ### MQTT
 
@@ -13,10 +13,10 @@ Can install mosquitto and run it
 
 - In the format <MAC><value>
 
-### Firebeetle
+### Fire beetle
 
 Report Mac Address and Distance 
-If firebeetle is currently publishing distances, turn on the LED
+If fire beetle is currently publishing distances, turn on the LED
 If it is not, then turn off the LED
 
 ### Core 2

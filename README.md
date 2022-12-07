@@ -64,3 +64,11 @@ JSON Library
 ## Extra Credit
 
 When you press a box on the core2, it will toggle that status
+
+
+## BLE
+
+Filter by numbers lower than -40 to see how to identify the phone
+
+NRF app on Android
+device name shows up in .getName()

@@ -13,6 +13,18 @@ Can install mosquito and run it
 
 - In the format <MAC><value>
 
+message format:
+
+```json
+{
+    "mac"
+}
+```
+
+```cpp
+DynamicJsonContent doc(1024);
+```
+
 ### Fire beetle
 
 Report Mac Address and Distance 

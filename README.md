@@ -15,20 +15,34 @@ Can install mosquito and run it
 
 message format:
 
+"CSC375/control"
+
 ```json
 {
-    "mac"
+    "MAC": string with ':',
+    "control": int/long
+}
+```
+
+"CSC375/dist"
+
+```json
+{
+    "MAC": string with ':',
+    "dist": int (truncate if necessary) 
 }
 ```
 
 ```cpp
 DynamicJsonContent doc(1024);
+
+
+
 ```
 
 ### Fire beetle
 
-Report Mac Address and Distance 
-If fire beetle is currently publishing distances, turn on the LED
+Report Mac Address and Distance If fire beetle is currently publishing distances, turn on the LED
 If it is not, then turn off the LED
 
 ### Core 2
@@ -46,12 +60,6 @@ Use phone
 
 JSON Library
 
-```json
-{
-    "mac": "MAC IS HERE",
-    "content": "CONTENT"
-}
-```
 
 ## Extra Credit
 

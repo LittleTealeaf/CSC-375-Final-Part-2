@@ -18,6 +18,8 @@ TFT_eSprite viewPorts[] = {TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd),
                            TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd),
                            TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd)};
 
+
+
 int checkWiFi() {
   int status = WiFi.status();
   if (status != WL_CONNECTED) {

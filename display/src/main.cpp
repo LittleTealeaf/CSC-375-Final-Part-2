@@ -8,7 +8,7 @@
 #define SCREEN_HEIGHT 240
 
 #define SPRITE_WIDTH 100
-#define SPRITE_HEIGHT 140
+#define SPRITE_HEIGHT 120
 
 String WiFiPrefix = "Omega";
 char WiFiPassword[] = "123456789";
@@ -39,7 +39,7 @@ int checkWiFi() {
 }
 
 void pushViewPort(int index) {
-	int y = SPRITE_HEIGHT * index / 3;
+	int y = index < 3 ? 0 : SPRITE_HEIGHT;
 	int x = SPRITE_WIDTH * (index % 3);
 	viewPorts[index].pushSprite(x, y);
 }
@@ -57,6 +57,22 @@ void setup() {
   // Begin wifi and search
   WiFi.mode(WIFI_STA);
   WiFi.begin();
+	viewPorts[0].fillScreen(TFT_GREEN);
+	viewPorts[1].fillScreen(TFT_BLUE);
+	viewPorts[2].fillScreen(TFT_WHITE);
+	viewPorts[3].fillScreen(TFT_PURPLE);
+	viewPorts[4].fillScreen(TFT_ORANGE);
+	viewPorts[5].fillScreen(TFT_NAVY);
 }
 
-void loop() { checkWiFi(); }
+int ind = 0;
+
+void loop() { checkWiFi();
+
+	if(ind < 6) {
+		pushViewPort(ind);
+		ind++;
+		delay(100);
+	}
+	
+}

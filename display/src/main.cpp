@@ -3,6 +3,7 @@
 #include <M5Core2.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <Ticker.h>
 
 #define SPRITE_COLOR_DEPTH 4
 #define SCREEN_WIDTH 300
@@ -14,29 +15,33 @@
 String WiFiPrefix = "Omega";
 char WiFiPassword[] = "123456789";
 
+Ticker wifiTicker;
+
+
 TFT_eSprite viewPorts[] = {TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd),
                            TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd),
                            TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd)};
 
+void pushViewPort(int index);
 
-
-int checkWiFi() {
+void checkWiFi() {
   int status = WiFi.status();
   if (status != WL_CONNECTED) {
+  	int scanResult = WiFi.scanComplete();
+	
+		if(scanResult == -2) {
+			WiFi.scanNetworks(true);
+		} else if(scanResult >= 0) {
+			
+			for(int i = 0; i < scanResult; i++) {
+				if(WiFi.SSID(i).startsWith(WiFiPrefix)) {
+					WiFi.begin(WiFi.SSID(i).begin(), WiFiPassword);
+				}
+			}
 
-    int status = WiFi.scanComplete();
-
-    if (status == -2) {
-      WiFi.scanNetworks(true);
-    } else if (status) {
-      for (int i = 0; i < status; i++) {
-        if (WiFi.SSID(i).indexOf(WiFiPrefix) == 0) {
-          WiFi.begin(WiFi.SSID(i).begin(), WiFiPassword);
-        }
-      }
-    }
-  }
-  return status;
+			WiFi.scanDelete();
+		}
+	}
 }
 
 
@@ -56,26 +61,18 @@ void setupViewports() {
 
 void setup() {
   M5.begin();
+	Serial.begin(115200);
   setupViewports();
   // Begin wifi and search
   WiFi.mode(WIFI_STA);
-  WiFi.begin();
-  viewPorts[0].fillScreen(TFT_GREEN);
-  viewPorts[1].fillScreen(TFT_BLUE);
-  viewPorts[2].fillScreen(TFT_WHITE);
-  viewPorts[3].fillScreen(TFT_PURPLE);
-  viewPorts[4].fillScreen(TFT_ORANGE);
-  viewPorts[5].fillScreen(TFT_NAVY);
+	WiFi.disconnect();
+
+
+	wifiTicker.attach_ms(1000,checkWiFi);
 }
 
 int ind = 0;
 
 void loop() {
-  checkWiFi();
 
-  if (ind < 6) {
-    pushViewPort(ind);
-    ind++;
-    delay(100);
-  }
 }

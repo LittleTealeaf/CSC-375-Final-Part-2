@@ -29,9 +29,6 @@ char WiFiPassword[] = "123456789";
 
 DisplayContent currentContent;
 TFT_eSprite screen(&M5.Lcd);
-TFT_eSprite viewPorts[] = {TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd),
-                           TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd),
-                           TFT_eSprite(&M5.Lcd), TFT_eSprite(&M5.Lcd)};
 
 typedef struct Sensor {
   String mac = "";
@@ -42,6 +39,8 @@ typedef struct Sensor {
 
 Sensor sensors[6];
 int sensorCount = 0;
+Ticker sensorTicker;
+
 
 void debug(const char* message) {
 	mqttClient.publish("takwashnak/debug",message);
@@ -173,6 +172,14 @@ void onMessageReceived(char *topic, byte *payload, unsigned int length) {
   }
 }
 
+void updateSensors() {
+	if(currentContent == DISPLAY_SENSORS) {
+		for(int i = 0; i < sensorCount; i++) {
+			renderSensor(i);
+		}
+	}
+}
+
 void setup() {
   M5.begin();
 
@@ -191,6 +198,8 @@ void setup() {
   }
   screen.setColorDepth(SPRITE_COLOR_DEPTH);
   screen.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+	sensorTicker.attach(1, updateSensors);
 }
 
 void loop() {

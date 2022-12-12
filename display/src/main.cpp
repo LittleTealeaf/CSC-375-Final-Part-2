@@ -170,18 +170,6 @@ void onMessageReceived(char *topic, byte *payload, unsigned int length) {
 		sensors[sensorIndex].dist = distance;
 		renderSensor(sensorIndex);
 
-    /*
-    for(int i = 0; i < 6; i++) {
-            if(sensors[i].mac.equals("") || sensors[i].mac.equals(mac)) {
-                    sensors[i].mac = mac;
-                    sensors[i].lastPingedAt = millis();
-                    viewPorts[i].setCursor(0, 0);
-                    viewPorts[i].printf("%d",distance);
-                    pushViewPort(i);
-                    break;
-            }
-    }q
-    */
   }
 }
 

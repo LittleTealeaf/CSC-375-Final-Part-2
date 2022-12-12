@@ -13,6 +13,9 @@
 #define SPRITE_HEIGHT 118
 #define SPRITE_PADDING 1
 
+#define SENSOR_UPDATE_MS 2000
+#define SENSOR_DISCONNECT_MS 5000
+
 enum DisplayContent { DISPLAY_MESSAGE, DISPLAY_SENSORS, DISPLAY_LOCKED };
 
 IPAddress server(192, 168, 137, 1);
@@ -41,9 +44,8 @@ Sensor sensors[6];
 int sensorCount = 0;
 Ticker sensorTicker;
 
-
-void debug(const char* message) {
-	mqttClient.publish("takwashnak/debug",message);
+void debug(const char *message) {
+  mqttClient.publish("takwashnak/debug", message);
 }
 
 void pushViewPort(int index) {
@@ -82,7 +84,7 @@ void renderSensor(int index) {
 
   uint32_t background;
 
-  if (sensor.lastPingedAt < millis() - 10000) {
+  if (sensor.lastPingedAt < millis() - SENSOR_DISCONNECT_MS) {
     background = TFT_DARKGREY;
   } else if (sensor.dist > 100) {
     background = TFT_GREEN;
@@ -150,7 +152,7 @@ void onMessageReceived(char *topic, byte *payload, unsigned int length) {
     int sensorIndex = -1;
 
     for (int i = 0; i < sensorCount; i++) {
-      if (strcmp(sensors[i].mac.begin(),mac) == 0) {
+      if (strcmp(sensors[i].mac.begin(), mac) == 0) {
         sensorIndex = i;
       }
     }
@@ -164,20 +166,21 @@ void onMessageReceived(char *topic, byte *payload, unsigned int length) {
       return;
     }
 
-		sensors[sensorIndex].mac = mac;
-		sensors[sensorIndex].lastPingedAt = millis();
-		sensors[sensorIndex].dist = distance;
-		renderSensor(sensorIndex);
-
+    sensors[sensorIndex].mac = mac;
+    sensors[sensorIndex].lastPingedAt = millis();
+    sensors[sensorIndex].dist = distance;
+    renderSensor(sensorIndex);
   }
 }
 
 void updateSensors() {
-	if(currentContent == DISPLAY_SENSORS) {
-		for(int i = 0; i < sensorCount; i++) {
-			renderSensor(i);
-		}
-	}
+  if (currentContent == DISPLAY_SENSORS) {
+    for (int i = 0; i < sensorCount; i++) {
+      if (sensors[i].lastPingedAt < millis() - SENSOR_UPDATE_MS) {
+        renderSensor(i);
+      }
+    }
+  }
 }
 
 void setup() {
@@ -199,7 +202,7 @@ void setup() {
   screen.setColorDepth(SPRITE_COLOR_DEPTH);
   screen.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-	sensorTicker.attach(1, updateSensors);
+  sensorTicker.attach_ms(SENSOR_UPDATE_MS, updateSensors);
 }
 
 void loop() {

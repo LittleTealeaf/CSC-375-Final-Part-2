@@ -96,6 +96,9 @@ void renderSensor(int index) {
 
   sensor.viewPort.fillScreen(background);
 
+	sensor.viewPort.setCursor(1, SPRITE_HEIGHT - 10);
+	sensor.viewPort.print(sensor.mac);
+
   pushViewPort(index);
 }
 

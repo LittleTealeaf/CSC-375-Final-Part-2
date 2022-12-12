@@ -44,7 +44,7 @@ Sensor sensors[6];
 int sensorCount = 0;
 Ticker sensorTicker;
 
-void debug(const char *message) {
+void debug(const char* message) {
   mqttClient.publish("takwashnak/debug", message);
 }
 
@@ -70,7 +70,7 @@ void setDisplayMode(DisplayContent content) {
   }
 }
 
-void displayMessage(const char *message) {
+void displayMessage(const char* message) {
   setDisplayMode(DISPLAY_MESSAGE);
   screen.fillScreen(TFT_BLACK);
   screen.setCursor(0, 0);
@@ -86,18 +86,21 @@ void renderSensor(int index) {
 
   if (sensor.lastPingedAt < millis() - SENSOR_DISCONNECT_MS) {
     background = TFT_DARKGREY;
-  } else if (sensor.dist > 100) {
+  }
+  else if (sensor.dist > 100) {
     background = TFT_GREEN;
-  } else if (sensor.dist > 50) {
+  }
+  else if (sensor.dist > 50) {
     background = TFT_YELLOW;
-  } else {
+  }
+  else {
     background = TFT_RED;
   }
 
   sensor.viewPort.fillScreen(background);
 
-	sensor.viewPort.setCursor(1, SPRITE_HEIGHT - 10);
-	sensor.viewPort.print(sensor.mac);
+  sensor.viewPort.setCursor(1, SPRITE_HEIGHT - 10);
+  sensor.viewPort.print(sensor.mac);
 
   pushViewPort(index);
 }
@@ -113,7 +116,8 @@ bool connectWiFi() {
     if (scanResult == -2) {
       displayMessage("Scanning Wifi Networks");
       WiFi.scanNetworks(true);
-    } else if (scanResult >= 0) {
+    }
+    else if (scanResult >= 0) {
       for (int i = 0; i < scanResult; i++) {
         if (WiFi.SSID(i).indexOf(WiFiPrefix) == 0) {
           displayMessage("Connecting to Network");
@@ -144,12 +148,12 @@ bool connectMQTT() {
   return true;
 }
 
-void onMessageReceived(char *topic, byte *payload, unsigned int length) {
+void onMessageReceived(char* topic, byte* payload, unsigned int length) {
   if (strcmp(topic, "CSC375/dist") == 0) {
     DynamicJsonDocument doc(1024);
     deserializeJson(doc, payload);
 
-    const char *mac = doc["MAC"];
+    const char* mac = doc["MAC"];
     int distance = doc["dist"];
 
     int sensorIndex = -1;

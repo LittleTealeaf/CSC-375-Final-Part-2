@@ -17,8 +17,6 @@ int port = 1883;
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
-int connectAttempts;
-
 int16_t sensorPin = D11;
 #define DISTANCE_PIN D11
 uint32_t pulseWidthUs;
@@ -36,7 +34,6 @@ bool connectWiFi() {
   int status = WiFi.status();
 
   if (status != WL_CONNECTED && !wifiLock) {
-    connectAttempts = 0;
     int scanResult = WiFi.scanComplete();
 
     if (scanResult == -2) {
@@ -57,12 +54,6 @@ bool connectWiFi() {
 
 bool connectMQTT() {
   if (!mqttClient.connected()) {
-    if(connectAttempts >= 50) {
-      WiFi.disconnect();
-      return false;
-    }
-
-    connectAttempts++;
     if (mqttClient.connect("takwashnak/firebeetle")) {
       mqttClient.subscribe("CSC375/control");
       return true;

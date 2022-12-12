@@ -134,8 +134,8 @@ bool connectMQTT() {
   if (!mqttClient.connected()) {
     displayMessage("Attempting to Connect to MQTT");
     if (mqttClient.connect("takwashnak/core2")) {
-      displayMessage("Connected to MQTT");
       mqttClient.subscribe("CSC375/dist");
+			setDisplayMode(DISPLAY_SENSORS);
       return true;
     }
     return false;
@@ -210,7 +210,6 @@ void setup() {
 
 void loop() {
   if (connectWiFi() && connectMQTT()) {
-    setDisplayMode(DISPLAY_SENSORS);
     mqttClient.loop();
   }
 }

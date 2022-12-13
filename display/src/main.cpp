@@ -1,5 +1,9 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <BLEAdvertisedDevice.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+#include <BLEUtils.h>
 #include <M5Core2.h>
 #include <PubSubClient.h>
 #include <Ticker.h>
@@ -16,8 +20,6 @@
 #define SENSOR_UPDATE_MS 2000
 #define SENSOR_DISCONNECT_MS 5000
 
-enum DisplayContent { DISPLAY_MESSAGE, DISPLAY_SENSORS, DISPLAY_LOCKED };
-
 IPAddress server(192, 168, 137, 1);
 int port = 1883;
 
@@ -30,8 +32,12 @@ bool wifiLock;
 String WiFiPrefix = "Omega";
 char WiFiPassword[] = "123456789";
 
-DisplayContent currentContent;
 TFT_eSprite screen(&M5.Lcd);
+
+TaskHandle_t asyncTaskHandler;
+
+BLEScan *bleScan;
+Ticker bleTicker;
 
 typedef struct Sensor {
   String mac = "";
@@ -44,40 +50,46 @@ Sensor sensors[6];
 int sensorCount = 0;
 Ticker sensorTicker;
 
+bool connected = false, unlocked = false, priorUnlocked;
+
+String message;
+
 void debug(const char *message) {
   mqttClient.publish("takwashnak/debug", message);
 }
 
 void pushViewPort(int index) {
-  if (currentContent == DISPLAY_SENSORS) {
+  if (connected && unlocked) {
     int y = index < 3 ? SPRITE_PADDING : SPRITE_HEIGHT + SPRITE_PADDING * 3;
     int x = SPRITE_PADDING + (SPRITE_PADDING * 2 + SPRITE_WIDTH) * (index % 3);
     sensors[index].viewPort.pushSprite(x, y);
   }
 }
 
-void setDisplayMode(DisplayContent content) {
-  if (content != currentContent) {
-    currentContent = content;
 
-    if (content == DISPLAY_SENSORS) {
-      screen.fillScreen(TFT_LIGHTGREY);
-      screen.pushSprite(0, 0);
-      for (int i = 0; i < 6; i++) {
-        pushViewPort(i);
-      }
-    }
-  }
+void pushMessage() {
+	screen.fillScreen(TFT_BLACK);
+	screen.setCursor(0, 0);
+	screen.setTextSize(2);
+	screen.print(message);
+	screen.pushSprite(0, 0);
 }
 
-void displayMessage(const char *message) {
-  setDisplayMode(DISPLAY_MESSAGE);
-  screen.fillScreen(TFT_BLACK);
-  screen.setCursor(0, 0);
-  screen.setTextSize(2);
-  screen.print(message);
-  screen.pushSprite(0, 0);
+void setMessage(const char *newMessage) {
+	message = newMessage;
+	if(unlocked) {
+		pushMessage();
+	}
 }
+
+void pushLockScreen() {
+	screen.fillScreen(TFT_BLACK);
+	screen.setCursor(0, 0);
+	screen.setTextSize(3);
+	screen.print("LOCKED");
+	screen.pushSprite(0, 0);
+}
+
 
 void renderSensor(int index) {
   Sensor sensor = sensors[index];
@@ -102,6 +114,14 @@ void renderSensor(int index) {
   pushViewPort(index);
 }
 
+void pushSensorScreen() {
+	screen.fillScreen(TFT_BLACK);
+	screen.pushSprite(0, 0);
+	for(int i = 0; i < 6; i++) {
+		renderSensor(i);
+	}
+}
+
 void clearWifiLock() { wifiLock = false; }
 
 bool connectWiFi() {
@@ -111,12 +131,12 @@ bool connectWiFi() {
     int scanResult = WiFi.scanComplete();
 
     if (scanResult == -2) {
-      displayMessage("Scanning Wifi Networks");
+      setMessage("Scanning Wifi Networks");
       WiFi.scanNetworks(true);
     } else if (scanResult >= 0) {
       for (int i = 0; i < scanResult; i++) {
         if (WiFi.SSID(i).indexOf(WiFiPrefix) == 0) {
-          displayMessage("Connecting to Network");
+          setMessage("Connecting to Network");
           WiFi.begin(WiFi.SSID(i).begin(), WiFiPassword);
           wifiLock = true;
           wifiTicker.once(5, clearWifiLock);
@@ -132,16 +152,27 @@ bool connectWiFi() {
 bool connectMQTT() {
 
   if (!mqttClient.connected()) {
-    displayMessage("Connecting to MQTT");
-    if (mqttClient.connect("takwashnak/core2")) {
-      mqttClient.subscribe("CSC375/dist");
-      setDisplayMode(DISPLAY_SENSORS);
-      return true;
-    }
-    return false;
+    setMessage("Connecting to MQTT");
+
+		if(!mqttClient.connect("takwashnak/core2")) {
+			return false;
+		}
+		mqttClient.subscribe("CSC375/dist");
   }
 
   return true;
+}
+
+bool connectBluetooth() {
+	BLEScanResults results = bleScan->start(1);
+	int count = results.getCount();
+	for(int i = 0; i < count; i++) {
+		BLEAdvertisedDevice device = results.getDevice(i);
+		if(String(device.getServiceData().c_str()).indexOf("takwashnak/key") != -1) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void onMessageReceived(char *topic, byte *payload, unsigned int length) {
@@ -176,7 +207,7 @@ void onMessageReceived(char *topic, byte *payload, unsigned int length) {
 }
 
 void updateSensors() {
-  if (currentContent == DISPLAY_SENSORS) {
+  if (connected && unlocked) {
     for (int i = 0; i < sensorCount; i++) {
       if (sensors[i].lastPingedAt < millis() - SENSOR_UPDATE_MS) {
         renderSensor(i);
@@ -184,6 +215,13 @@ void updateSensors() {
     }
   }
 }
+
+void asyncCode(void *pvParameters) {
+	for(;;) {
+		unlocked = connectBluetooth();	
+	}
+}
+
 
 void setup() {
   M5.begin();
@@ -205,10 +243,37 @@ void setup() {
   screen.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
 
   sensorTicker.attach_ms(SENSOR_UPDATE_MS, updateSensors);
+
+  BLEDevice::init("");
+  bleScan = BLEDevice::getScan();
+  bleScan->setActiveScan(true);
+  bleScan->setInterval(100);
+  bleScan->setWindow(99);
+
+	xTaskCreatePinnedToCore(asyncCode, "async", 10000, NULL, 1, &asyncTaskHandler, 0);
 }
 
 void loop() {
-  if (connectWiFi() && connectMQTT()) {
+	bool oldConnected = connected;
+	connected = connectWiFi() && connectMQTT();
+  if (connected) {
     mqttClient.loop();
+
+		if(unlocked && !oldConnected) {
+			pushLockScreen();
+		}
   }
+
+	if(!priorUnlocked && unlocked) {
+		debug("UNLOCKED");
+		if(connected) {
+			pushSensorScreen();
+		} else {
+			pushMessage();
+		}
+	} else if(priorUnlocked && !unlocked) {
+		debug("LOCKED");
+		pushLockScreen();
+	}
+	priorUnlocked = unlocked;
 }

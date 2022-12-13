@@ -54,7 +54,7 @@ bool connectWiFi() {
 
 bool connectMQTT() {
   if (!mqttClient.connected()) {
-    if(!mqttClient.connect("takwashnak/firebeetle")) {
+    if (!mqttClient.connect("takwashnak/firebeetle")) {
       return false;
     }
     mqttClient.subscribe("CSC375/control");
@@ -77,7 +77,7 @@ void onMessageReceived(char* topic, byte* payload, unsigned int length) {
 
     Serial.println("Extracted Values");
 
-    if(strcmp(mac, WiFi.macAddress().begin()) == 0) {
+    if (strcmp(mac, WiFi.macAddress().begin()) == 0) {
       Serial.println("Setting Activitiy");
       active = value == 1;
     }
@@ -86,23 +86,23 @@ void onMessageReceived(char* topic, byte* payload, unsigned int length) {
 }
 
 void readSensor() {
-  if(connected && active) {
+  if (connected && active) {
     int16_t dist, temp;
-    pinMode(DISTANCE_PIN,OUTPUT);
-    digitalWrite(DISTANCE_PIN,LOW);
-    digitalWrite(DISTANCE_PIN,HIGH);
+    pinMode(DISTANCE_PIN, OUTPUT);
+    digitalWrite(DISTANCE_PIN, LOW);
+    digitalWrite(DISTANCE_PIN, HIGH);
     delayMicroseconds(10);
-    digitalWrite(DISTANCE_PIN,LOW);
-    pinMode(DISTANCE_PIN,INPUT);
-    pulseWidthUs = pulseIn(DISTANCE_PIN,HIGH);
+    digitalWrite(DISTANCE_PIN, LOW);
+    pinMode(DISTANCE_PIN, INPUT);
+    pulseWidthUs = pulseIn(DISTANCE_PIN, HIGH);
 
     DynamicJsonDocument doc(1024);
     doc["MAC"] = WiFi.macAddress();
-    doc["dist"] = (int) (pulseWidthUs * VELOCITY_TEMP(20) / 2.0);
+    doc["dist"] = (int)(pulseWidthUs * VELOCITY_TEMP(20) / 2.0);
 
-    serializeJson(doc,packet,1024);
+    serializeJson(doc, packet, 1024);
 
-    mqttClient.publish("CSC375/dist",packet);
+    mqttClient.publish("CSC375/dist", packet);
 
   }
 }
@@ -121,7 +121,7 @@ void setup() {
 
   active = true;
 
-  sensorTicker.attach(1,readSensor);
+  sensorTicker.attach(1, readSensor);
 }
 
 void loop() {

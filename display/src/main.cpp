@@ -135,7 +135,7 @@ bool connectMQTT() {
     displayMessage("Connecting to MQTT");
     if (mqttClient.connect("takwashnak/core2")) {
       mqttClient.subscribe("CSC375/dist");
-			setDisplayMode(DISPLAY_SENSORS);
+      setDisplayMode(DISPLAY_SENSORS);
       return true;
     }
     return false;
@@ -160,13 +160,12 @@ void onMessageReceived(char *topic, byte *payload, unsigned int length) {
       }
     }
 
-    if (sensorIndex == -1 && sensorCount < 6) {
+    if (sensorIndex == -1) {
+      if (sensorCount >= 6) {
+        return;
+      }
       sensorIndex = sensorCount;
       sensorCount++;
-    }
-
-    if (sensorIndex == -1) {
-      return;
     }
 
     sensors[sensorIndex].mac = mac;

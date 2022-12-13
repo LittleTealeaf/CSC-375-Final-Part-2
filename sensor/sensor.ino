@@ -54,11 +54,10 @@ bool connectWiFi() {
 
 bool connectMQTT() {
   if (!mqttClient.connected()) {
-    if (mqttClient.connect("takwashnak/firebeetle")) {
-      mqttClient.subscribe("CSC375/control");
-      return true;
+    if(!mqttClient.connect("takwashnak/firebeetle")) {
+      return false;
     }
-    return false;
+    mqttClient.subscribe("CSC375/control");
   }
   return true;
 }

@@ -9,38 +9,42 @@
 #include <Ticker.h>
 #include <WiFi.h>
 
-#define SPRITE_COLOR_DEPTH 4
+// Connectivity Configuration
+
+#define RSSI_CONNECT -50
+#define RSSI_DISCONNECT -60
+
+// Screen Configuration
+#define COLOR_DEPTH 4
 #define SCREEN_WIDTH 315
 #define SCREEN_HEIGHT 240
-
 #define SPRITE_WIDTH 103
 #define SPRITE_HEIGHT 118
 #define SPRITE_PADDING 1
 
-#define SENSOR_UPDATE_MS 2000
+// SENSOR CONNECTION
+
+#define SENSOR_UPDATE_MS 1500
 #define SENSOR_DISCONNECT_MS 5000
 
-IPAddress server(192, 168, 137, 1);
+// MQTT Server Configuration
+IPAddress mqttServer(192, 168, 137, 1);
 int port = 1883;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
-Ticker wifiTicker;
-bool wifiLock;
+// WIFI Configuration
 
 String WiFiPrefix = "Omega";
 char WiFiPassword[] = "123456789";
 
-TFT_eSprite screen(&M5.Lcd);
+Ticker wifiTicker;
+bool wifiLock;
 
-TaskHandle_t asyncTaskHandler;
-
-BLEScan *bleScan;
-Ticker bleTicker;
-
+// Sensors
 typedef struct Sensor {
-  String mac = "";
+  String mac;
   long lastPingedAt;
   int dist;
   TFT_eSprite viewPort = TFT_eSprite(&M5.Lcd);
@@ -50,178 +54,197 @@ Sensor sensors[6];
 int sensorCount = 0;
 Ticker sensorTicker;
 
-bool connected = false, unlocked = false, priorUnlocked;
+// Misc.
 
-String message;
+TFT_eSprite screen(&M5.Lcd);
+String connectionStatus;
 
-void debug(const char *message) {
-  mqttClient.publish("takwashnak/debug", message);
+bool connected, unlocked;
+
+//"Exported" value from async code
+bool exportUnlocked = false;
+
+//// BEGIN ASYNC (CORE 0) CODE
+TaskHandle_t asyncTaskHandler;
+
+// Async Variables
+bool asyncUnlocked, asyncUnlockedBuffer, asyncUpdated;
+BLEScan *bleScan;
+
+// Sets both the async and non-async unlocked value
+void asyncSetUnlocked(bool value) {
+  exportUnlocked = value;
+  asyncUnlocked = value;
 }
 
-void pushViewPort(int index) {
-  if (connected && unlocked) {
-    int y = index < 3 ? SPRITE_PADDING : SPRITE_HEIGHT + SPRITE_PADDING * 3;
-    int x = SPRITE_PADDING + (SPRITE_PADDING * 2 + SPRITE_WIDTH) * (index % 3);
-    sensors[index].viewPort.pushSprite(x, y);
+class AsyncAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+  void onResult(BLEAdvertisedDevice device) {
+    if (String(device.getServiceData().c_str()).indexOf("takwashnak/key") !=
+        -1) {
+      if (asyncUnlocked && device.getRSSI() < RSSI_DISCONNECT) {
+        if (!asyncUnlockedBuffer) {
+          asyncSetUnlocked(false);
+        }
+        asyncUnlockedBuffer = false;
+      } else if (device.getRSSI() > RSSI_CONNECT) {
+        asyncUnlockedBuffer = true;
+        asyncSetUnlocked(true);
+      }
+      asyncUpdated = true;
+    }
+  }
+};
+
+void asyncThread(void *params) {
+  bleScan->setAdvertisedDeviceCallbacks(new AsyncAdvertisedDeviceCallbacks());
+  for (;;) {
+    asyncUpdated = false;
+    BLEScanResults scanResults = bleScan->start(3, false);
+    if (!asyncUpdated) {
+      if (asyncUnlockedBuffer) {
+        asyncUnlockedBuffer = false;
+      } else {
+        asyncSetUnlocked(false);
+      }
+    }
+  }
+}
+//// END ASYNC (CORE 0) CODE
+
+void pushConnectionStatus() {
+  screen.fillScreen(TFT_BLACK);
+  screen.setCursor(0, 0);
+  screen.setTextSize(2);
+  screen.print(connectionStatus);
+  screen.pushSprite(0, 0);
+}
+
+void pushLockedScreen() {
+  screen.fillScreen(TFT_BLACK);
+  screen.setCursor(0, 0);
+  screen.setTextSize(4);
+  screen.print("LOCKED");
+  screen.pushSprite(0, 0);
+}
+
+void pushSensorBackground() {
+  screen.fillScreen(TFT_BLACK);
+  screen.pushSprite(0, 0);
+}
+
+void pushSensor(int i) {
+  int y = i < 3 ? SPRITE_PADDING : SPRITE_HEIGHT + SPRITE_PADDING * 3;
+  int x = SPRITE_PADDING + (SPRITE_PADDING * 2 + SPRITE_WIDTH) * (i % 3);
+  sensors[i].viewPort.pushSprite(x, y);
+}
+
+void setConnectionStatus(const char *newConnectionStatus) {
+  connectionStatus = newConnectionStatus;
+  if (!connected && unlocked) {
+    pushConnectionStatus();
   }
 }
 
-
-void pushMessage() {
-	screen.fillScreen(TFT_BLACK);
-	screen.setCursor(0, 0);
-	screen.setTextSize(2);
-	screen.print(message);
-	screen.pushSprite(0, 0);
-}
-
-void setMessage(const char *newMessage) {
-	message = newMessage;
-	if(unlocked) {
-		pushMessage();
-	}
-}
-
-void pushLockScreen() {
-	screen.fillScreen(TFT_BLACK);
-	screen.setCursor(0, 0);
-	screen.setTextSize(3);
-	screen.print("LOCKED");
-	screen.pushSprite(0, 0);
-}
-
-
 void renderSensor(int index) {
-  Sensor sensor = sensors[index];
 
   uint32_t background;
 
-  if (sensor.lastPingedAt < millis() - SENSOR_DISCONNECT_MS) {
+  if (sensors[index].lastPingedAt < millis() - SENSOR_DISCONNECT_MS) {
     background = TFT_DARKGREY;
-  } else if (sensor.dist > 100) {
+  } else if (sensors[index].dist > 100) {
     background = TFT_GREEN;
-  } else if (sensor.dist > 50) {
+  } else if (sensors[index].dist > 50) {
     background = TFT_YELLOW;
   } else {
     background = TFT_RED;
   }
 
-  sensor.viewPort.fillScreen(background);
+  sensors[index].viewPort.fillScreen(background);
 
-  sensor.viewPort.setCursor(1, SPRITE_HEIGHT - 10);
-  sensor.viewPort.print(sensor.mac);
+  sensors[index].viewPort.setCursor(1, SPRITE_HEIGHT - 10);
+  sensors[index].viewPort.setTextSize(1);
+  sensors[index].viewPort.print(sensors[index].mac);
 
-  pushViewPort(index);
+  if (connected && unlocked) {
+    pushSensor(index);
+  }
 }
 
-void pushSensorScreen() {
-	screen.fillScreen(TFT_BLACK);
-	screen.pushSprite(0, 0);
-	for(int i = 0; i < 6; i++) {
-		renderSensor(i);
+void onMessageReceived(char *topic, byte *payload, unsigned int length) {
+	if (strcmp(topic,"CSC375/dist") == 0) {
+		DynamicJsonDocument doc(1024);
+		deserializeJson(doc,payload);
+
+		const char *mac = doc["MAC"];
+		int distance = doc["dist"];
+
+		int sensorIndex = -1;
+
+		for(int i = 0; i < sensorCount; i++) {
+			if(strcmp(sensors[i].mac.begin(),mac) == 0) {
+				sensorIndex = i;
+			}
+		}
+
+		if(sensorIndex == -1) {
+			if(sensorCount >= 6) {
+				return;
+			}
+			sensorIndex = sensorCount;
+			sensorCount++;
+		}
+
+		sensors[sensorIndex].mac = mac;
+		sensors[sensorIndex].lastPingedAt = millis();
+		sensors[sensorIndex].dist = distance;
+		renderSensor(sensorIndex);
 	}
 }
 
-void clearWifiLock() { wifiLock = false; }
+void updateSensors() {
+	for(int i = 0; i < sensorCount; i++) {
+		if(sensors[i].lastPingedAt < millis() - SENSOR_UPDATE_MS) {
+			renderSensor(i);
+		}
+	}
+}
+
+void clearWiFiLock() { wifiLock = false; }
 
 bool connectWiFi() {
   int status = WiFi.status();
 
   if (status != WL_CONNECTED && !wifiLock) {
     int scanResult = WiFi.scanComplete();
-
     if (scanResult == -2) {
-      setMessage("Scanning Wifi Networks");
+      setConnectionStatus("Scanning WiFi Networks");
       WiFi.scanNetworks(true);
     } else if (scanResult >= 0) {
       for (int i = 0; i < scanResult; i++) {
         if (WiFi.SSID(i).indexOf(WiFiPrefix) == 0) {
-          setMessage("Connecting to Network");
+          setConnectionStatus("Connecting to Network");
           WiFi.begin(WiFi.SSID(i).begin(), WiFiPassword);
           wifiLock = true;
-          wifiTicker.once(5, clearWifiLock);
+          wifiTicker.once(5, clearWiFiLock);
         }
       }
       WiFi.scanDelete();
     }
   }
-
-  return status == WL_CONNECTED;
+	return status == WL_CONNECTED;
 }
 
 bool connectMQTT() {
-
   if (!mqttClient.connected()) {
-    setMessage("Connecting to MQTT");
-
-		if(!mqttClient.connect("takwashnak/core2")) {
-			return false;
-		}
-		mqttClient.subscribe("CSC375/dist");
+    setConnectionStatus("Connecting to MQTT");
+    if (!mqttClient.connect("takwashnak/core2")) {
+      setConnectionStatus("Failed Connecting MQTT");
+      return false;
+    }
+    mqttClient.subscribe("CSC375/dist");
   }
-
   return true;
 }
-
-bool connectBluetooth() {
-	BLEScanResults results = bleScan->start(1);
-	int count = results.getCount();
-	for(int i = 0; i < count; i++) {
-		BLEAdvertisedDevice device = results.getDevice(i);
-		if(String(device.getServiceData().c_str()).indexOf("takwashnak/key") != -1) {
-			return true;
-		}
-	}
-	return false;
-}
-
-void onMessageReceived(char *topic, byte *payload, unsigned int length) {
-  if (strcmp(topic, "CSC375/dist") == 0) {
-    DynamicJsonDocument doc(1024);
-    deserializeJson(doc, payload);
-
-    const char *mac = doc["MAC"];
-    int distance = doc["dist"];
-
-    int sensorIndex = -1;
-
-    for (int i = 0; i < sensorCount; i++) {
-      if (strcmp(sensors[i].mac.begin(), mac) == 0) {
-        sensorIndex = i;
-      }
-    }
-
-    if (sensorIndex == -1) {
-      if (sensorCount >= 6) {
-        return;
-      }
-      sensorIndex = sensorCount;
-      sensorCount++;
-    }
-
-    sensors[sensorIndex].mac = mac;
-    sensors[sensorIndex].lastPingedAt = millis();
-    sensors[sensorIndex].dist = distance;
-    renderSensor(sensorIndex);
-  }
-}
-
-void updateSensors() {
-  if (connected && unlocked) {
-    for (int i = 0; i < sensorCount; i++) {
-      if (sensors[i].lastPingedAt < millis() - SENSOR_UPDATE_MS) {
-        renderSensor(i);
-      }
-    }
-  }
-}
-
-void asyncCode(void *pvParameters) {
-	for(;;) {
-		unlocked = connectBluetooth();	
-	}
-}
-
 
 void setup() {
   M5.begin();
@@ -229,20 +252,20 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
-  mqttClient.setServer(server, port);
+  mqttClient.setServer(mqttServer, port);
   mqttClient.setCallback(onMessageReceived);
 
   wifiLock = false;
 
   for (int i = 0; i < 6; i++) {
-    sensors[i].viewPort.setColorDepth(SPRITE_COLOR_DEPTH);
+    sensors[i].viewPort.setColorDepth(COLOR_DEPTH);
     sensors[i].viewPort.createSprite(SPRITE_WIDTH, SPRITE_HEIGHT);
     sensors[i].viewPort.fillScreen(TFT_BLACK);
   }
-  screen.setColorDepth(SPRITE_COLOR_DEPTH);
+  screen.setColorDepth(COLOR_DEPTH);
   screen.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-  sensorTicker.attach_ms(SENSOR_UPDATE_MS, updateSensors);
+	sensorTicker.attach_ms(SENSOR_UPDATE_MS,updateSensors);
 
   BLEDevice::init("");
   bleScan = BLEDevice::getScan();
@@ -250,30 +273,48 @@ void setup() {
   bleScan->setInterval(100);
   bleScan->setWindow(99);
 
-	xTaskCreatePinnedToCore(asyncCode, "async", 10000, NULL, 1, &asyncTaskHandler, 0);
+  xTaskCreatePinnedToCore(asyncThread, "async", 10000, NULL, 1,
+                          &asyncTaskHandler, 0);
+
+	connected = false;
+	unlocked = true;
 }
 
 void loop() {
-	bool oldConnected = connected;
-	connected = connectWiFi() && connectMQTT();
-  if (connected) {
-    mqttClient.loop();
+  bool isConnected = connectWiFi() && connectMQTT();
+	bool connectChange = isConnected != connected;
+	bool unlockChanged = exportUnlocked != unlocked;
+	connected = isConnected;
+	unlocked = exportUnlocked;
 
-		if(unlocked && !oldConnected) {
-			pushLockScreen();
-		}
-  }
 
-	if(!priorUnlocked && unlocked) {
-		debug("UNLOCKED");
-		if(connected) {
-			pushSensorScreen();
-		} else {
-			pushMessage();
+	if(isConnected) {
+		if(connectChange && unlocked) {
+			pushSensorBackground();
+			for(int i = 0; i < 6; i++) {
+				pushSensor(i);
+			}
 		}
-	} else if(priorUnlocked && !unlocked) {
-		debug("LOCKED");
-		pushLockScreen();
+		mqttClient.loop();
+	} else {
+		if(connectChange && unlocked) {
+			pushConnectionStatus();
+		}
 	}
-	priorUnlocked = unlocked;
+
+	if(unlockChanged) {
+		if(!unlocked) {
+			pushLockedScreen();
+		} else {
+			if(connected) {
+				pushSensorBackground();
+				for(int i = 0; i < 6; i++) {
+					pushSensor(i);
+				}
+			} else {
+				pushConnectionStatus();
+			}
+		}
+	}
+
 }

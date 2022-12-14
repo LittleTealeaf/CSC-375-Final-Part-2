@@ -47,7 +47,7 @@ typedef struct Sensor {
   String mac;
   long lastPingedAt;
   int dist;
-  TFT_eSprite viewPort = TFT_eSprite(&M5.Lcd);
+  TFT_eSprite viewPort = TFT_eSprite(&M5.Lcd);	
 } Sensor;
 
 Sensor sensors[6];
@@ -58,6 +58,8 @@ Ticker sensorTicker;
 
 TFT_eSprite screen(&M5.Lcd);
 String connectionStatus;
+
+char packet[1024];
 
 bool connected, unlocked;
 
@@ -138,6 +140,20 @@ void pushSensor(int i) {
   sensors[i].viewPort.pushSprite(x, y);
 }
 
+int getPositionIndex(int x, int y) {
+	int index = 0;
+	if(y >= SPRITE_HEIGHT + SPRITE_PADDING * 2) {
+		index += 3;
+	}
+	if(x >= SPRITE_WIDTH + SPRITE_PADDING * 2) {
+		index += 1;
+	}
+	if(x >= SPRITE_WIDTH * 2 + SPRITE_PADDING * 4) {
+		index += 1;
+	}
+	return index;
+}
+
 void setConnectionStatus(const char *newConnectionStatus) {
   connectionStatus = newConnectionStatus;
   if (!connected && unlocked) {
@@ -201,6 +217,22 @@ void onMessageReceived(char *topic, byte *payload, unsigned int length) {
   }
 }
 
+void onTouch(Event& e) {
+	if(connected && unlocked) {
+		int index = getPositionIndex(e.to.x, e.to.y);
+		if(index < sensorCount) {
+			DynamicJsonDocument doc(1024);
+			doc["MAC"] = sensors[index].mac;
+			doc["control"] = sensors[index].lastPingedAt < millis() - SENSOR_DISCONNECT_MS ? 1 : 0;
+
+			serializeJson(doc, packet);
+
+			mqttClient.publish("CSC375/control", packet);
+			
+		}
+	}
+}
+
 void updateSensors() {
   for (int i = 0; i < sensorCount; i++) {
     if (sensors[i].lastPingedAt < millis() - SENSOR_UPDATE_MS) {
@@ -208,6 +240,7 @@ void updateSensors() {
     }
   }
 }
+
 
 void clearWiFiLock() { wifiLock = false; }
 
@@ -275,12 +308,12 @@ void setup() {
 
   xTaskCreatePinnedToCore(asyncThread, "async", 10000, NULL, 1,
                           &asyncTaskHandler, 0);
-
   connected = false;
   unlocked = true;
 }
 
 void loop() {
+	M5.update();
   bool isConnected = connectWiFi() && connectMQTT();
   bool connectChange = isConnected != connected;
   bool unlockChanged = exportUnlocked != unlocked;
@@ -315,4 +348,9 @@ void loop() {
       }
     }
   }
+
+	Event& e = M5.Buttons.event;
+	if(e.type == E_RELEASE) {
+		onTouch(e);
+	}
 }

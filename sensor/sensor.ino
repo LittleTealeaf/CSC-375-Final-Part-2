@@ -55,6 +55,7 @@ bool connectWiFi() {
 bool connectMQTT() {
   if (!mqttClient.connected()) {
     if (!mqttClient.connect("takwashnak/firebeetle")) {
+      WiFi.reconnect();
       return false;
     }
     mqttClient.subscribe("CSC375/control");

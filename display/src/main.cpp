@@ -171,42 +171,42 @@ void renderSensor(int index) {
 }
 
 void onMessageReceived(char *topic, byte *payload, unsigned int length) {
-	if (strcmp(topic,"CSC375/dist") == 0) {
-		DynamicJsonDocument doc(1024);
-		deserializeJson(doc,payload);
+  if (strcmp(topic, "CSC375/dist") == 0) {
+    DynamicJsonDocument doc(1024);
+    deserializeJson(doc, payload);
 
-		const char *mac = doc["MAC"];
-		int distance = doc["dist"];
+    const char *mac = doc["MAC"];
+    int distance = doc["dist"];
 
-		int sensorIndex = -1;
+    int sensorIndex = -1;
 
-		for(int i = 0; i < sensorCount; i++) {
-			if(strcmp(sensors[i].mac.begin(),mac) == 0) {
-				sensorIndex = i;
-			}
-		}
+    for (int i = 0; i < sensorCount; i++) {
+      if (strcmp(sensors[i].mac.begin(), mac) == 0) {
+        sensorIndex = i;
+      }
+    }
 
-		if(sensorIndex == -1) {
-			if(sensorCount >= 6) {
-				return;
-			}
-			sensorIndex = sensorCount;
-			sensorCount++;
-		}
+    if (sensorIndex == -1) {
+      if (sensorCount >= 6) {
+        return;
+      }
+      sensorIndex = sensorCount;
+      sensorCount++;
+    }
 
-		sensors[sensorIndex].mac = mac;
-		sensors[sensorIndex].lastPingedAt = millis();
-		sensors[sensorIndex].dist = distance;
-		renderSensor(sensorIndex);
-	}
+    sensors[sensorIndex].mac = mac;
+    sensors[sensorIndex].lastPingedAt = millis();
+    sensors[sensorIndex].dist = distance;
+    renderSensor(sensorIndex);
+  }
 }
 
 void updateSensors() {
-	for(int i = 0; i < sensorCount; i++) {
-		if(sensors[i].lastPingedAt < millis() - SENSOR_UPDATE_MS) {
-			renderSensor(i);
-		}
-	}
+  for (int i = 0; i < sensorCount; i++) {
+    if (sensors[i].lastPingedAt < millis() - SENSOR_UPDATE_MS) {
+      renderSensor(i);
+    }
+  }
 }
 
 void clearWiFiLock() { wifiLock = false; }
@@ -231,7 +231,7 @@ bool connectWiFi() {
       WiFi.scanDelete();
     }
   }
-	return status == WL_CONNECTED;
+  return status == WL_CONNECTED;
 }
 
 bool connectMQTT() {
@@ -265,7 +265,7 @@ void setup() {
   screen.setColorDepth(COLOR_DEPTH);
   screen.createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-	sensorTicker.attach_ms(SENSOR_UPDATE_MS,updateSensors);
+  sensorTicker.attach_ms(SENSOR_UPDATE_MS, updateSensors);
 
   BLEDevice::init("");
   bleScan = BLEDevice::getScan();
@@ -276,45 +276,43 @@ void setup() {
   xTaskCreatePinnedToCore(asyncThread, "async", 10000, NULL, 1,
                           &asyncTaskHandler, 0);
 
-	connected = false;
-	unlocked = true;
+  connected = false;
+  unlocked = true;
 }
 
 void loop() {
   bool isConnected = connectWiFi() && connectMQTT();
-	bool connectChange = isConnected != connected;
-	bool unlockChanged = exportUnlocked != unlocked;
-	connected = isConnected;
-	unlocked = exportUnlocked;
+  bool connectChange = isConnected != connected;
+  bool unlockChanged = exportUnlocked != unlocked;
+  connected = isConnected;
+  unlocked = exportUnlocked;
 
+  if (isConnected) {
+    if (connectChange && unlocked) {
+      pushSensorBackground();
+      for (int i = 0; i < 6; i++) {
+        pushSensor(i);
+      }
+    }
+    mqttClient.loop();
+  } else {
+    if (connectChange && unlocked) {
+      pushConnectionStatus();
+    }
+  }
 
-	if(isConnected) {
-		if(connectChange && unlocked) {
-			pushSensorBackground();
-			for(int i = 0; i < 6; i++) {
-				pushSensor(i);
-			}
-		}
-		mqttClient.loop();
-	} else {
-		if(connectChange && unlocked) {
-			pushConnectionStatus();
-		}
-	}
-
-	if(unlockChanged) {
-		if(!unlocked) {
-			pushLockedScreen();
-		} else {
-			if(connected) {
-				pushSensorBackground();
-				for(int i = 0; i < 6; i++) {
-					pushSensor(i);
-				}
-			} else {
-				pushConnectionStatus();
-			}
-		}
-	}
-
+  if (unlockChanged) {
+    if (!unlocked) {
+      pushLockedScreen();
+    } else {
+      if (connected) {
+        pushSensorBackground();
+        for (int i = 0; i < 6; i++) {
+          pushSensor(i);
+        }
+      } else {
+        pushConnectionStatus();
+      }
+    }
+  }
 }

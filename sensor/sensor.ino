@@ -66,18 +66,12 @@ bool connectMQTT() {
 
 
 void onMessageReceived(char* topic, byte* payload, unsigned int length) {
-  Serial.println("Recieved Packet");
-  Serial.println(topic);
   if (strcmp(topic, "CSC375/control") == 0) {
-    Serial.println("Is control topic");
     DynamicJsonDocument doc(1024);
     deserializeJson(doc, payload);
-    Serial.println("Deserialized");
 
     const char* mac = doc["MAC"];
     int value = doc["control"];
-
-    Serial.println("Extracted Values");
 
     if (strcmp(mac, WiFi.macAddress().begin()) == 0) {
       Serial.println("Setting Activitiy");
@@ -111,8 +105,6 @@ void readSensor() {
 
 
 void setup() {
-  Serial.begin(115200);
-
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
